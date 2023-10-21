@@ -86,18 +86,20 @@ public class ConstantPropagation extends
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        var out_new = in.copy();
+        Boolean change = false;
+        for (var v: in.keySet()){
+            var value = in.get(v);
+            change |= out.update(v, value);
+        }
         if (stmt instanceof DefinitionStmt<?,?> d_stmt) {
             if (d_stmt.getLValue() instanceof Var v && d_stmt.getRValue() instanceof Exp){
                 var e = (Exp) d_stmt.getRValue();
                 if (canHoldInt(v)){
-                    out_new.update(v, evaluate(e, in));
+                    change |= out.update(v, evaluate(e, in));
                 }
             }
         }
-        var res =  (out == out_new);
-        out = out_new;
-        return res;
+        return change;
     }
 
     /**
@@ -127,17 +129,21 @@ public class ConstantPropagation extends
      */
     public static Value evaluate(Exp exp, CPFact in) {
         if (exp instanceof Var v){
-            if (v.isTempConst()){
-                if (v.getTempConstValue() instanceof IntLiteral i){
-                    return Value.makeConstant(i.getValue());
-                }else{
-                    assert false:"literal should always be int";
-                }
-            }else{
-                return in.get(v);
-            }
+            return in.get(v);
+//            if (v.isTempConst()){
+//                if (v.getTempConstValue() instanceof IntLiteral i){
+//                    return Value.makeConstant(i.getValue());
+//                }else{
+//                    assert false:"literal should always be int";
+//                }
+//            }else{
+//                return in.get(v);
+//            }
         }
 
+        if (exp instanceof IntLiteral){
+            return Value.makeConstant(((IntLiteral) exp).getValue());
+        }
         if (exp instanceof ArithmeticExp ae){
             var op1 = evaluate(ae.getOperand1(), in);
             var op2 = evaluate(ae.getOperand2(), in);
@@ -184,6 +190,6 @@ public class ConstantPropagation extends
                 case XOR -> {return Value.makeConstant(op1.getConstant() ^ op2.getConstant());}
             }
         }
-        return Value.getUndef();
+        return Value.getNAC();
     }
 }
