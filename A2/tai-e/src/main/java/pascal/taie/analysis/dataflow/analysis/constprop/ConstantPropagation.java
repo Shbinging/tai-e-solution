@@ -26,20 +26,13 @@ import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
-import pascal.taie.ir.exp.ArithmeticExp;
-import pascal.taie.ir.exp.BinaryExp;
-import pascal.taie.ir.exp.BitwiseExp;
-import pascal.taie.ir.exp.ConditionExp;
-import pascal.taie.ir.exp.Exp;
-import pascal.taie.ir.exp.IntLiteral;
-import pascal.taie.ir.exp.ShiftExp;
-import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.exp.*;
+import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
-
 public class ConstantPropagation extends
         AbstractDataflowAnalysis<Stmt, CPFact> {
 
@@ -56,33 +49,55 @@ public class ConstantPropagation extends
 
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
-        // TODO - finish me
-        return null;
+        var cp_fact = new CPFact();
+        cfg.getIR().getParams().forEach(
+                param -> {
+                    if (canHoldInt(param)){
+                        cp_fact.update(param, Value.getNAC());
+                    }
+                }
+        );
+        return cp_fact;
     }
 
     @Override
     public CPFact newInitialFact() {
-        // TODO - finish me
-        return null;
+        return new CPFact();
     }
 
     @Override
     public void meetInto(CPFact fact, CPFact target) {
-        // TODO - finish me
+        fact.forEach((var, value)->{
+            target.update(var, meetValue(value, target.get(var)));
+        });
     }
 
     /**
      * Meets two Values.
      */
     public Value meetValue(Value v1, Value v2) {
-        // TODO - finish me
-        return null;
+        if (v1.isUndef() && v2.isUndef()) return Value.getUndef();
+        if (v1.isUndef()) return v2;
+        if (v2.isUndef()) return v1;
+        if (v1.isNAC() || v2.isNAC()) return Value.getNAC();
+        if (v1.getConstant() == v2.getConstant()) return v1;
+        else return Value.getNAC();
     }
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        var out_new = in.copy();
+        if (stmt instanceof DefinitionStmt<?,?> d_stmt) {
+            if (d_stmt.getLValue() instanceof Var v && d_stmt.getRValue() instanceof Exp){
+                var e = (Exp) d_stmt.getRValue();
+                if (canHoldInt(v)){
+                    out_new.update(v, evaluate(e, in));
+                }
+            }
+        }
+        var res =  (out == out_new);
+        out = out_new;
+        return res;
     }
 
     /**
@@ -111,7 +126,64 @@ public class ConstantPropagation extends
      * @return the resulting {@link Value}
      */
     public static Value evaluate(Exp exp, CPFact in) {
-        // TODO - finish me
-        return null;
+        if (exp instanceof Var v){
+            if (v.isTempConst()){
+                if (v.getTempConstValue() instanceof IntLiteral i){
+                    return Value.makeConstant(i.getValue());
+                }else{
+                    assert false:"literal should always be int";
+                }
+            }else{
+                return in.get(v);
+            }
+        }
+
+        if (exp instanceof ArithmeticExp ae){
+            var op1 = evaluate(ae.getOperand1(), in);
+            var op2 = evaluate(ae.getOperand2(), in);
+            if (op1.isNAC() || op2.isNAC()) return Value.getNAC();
+            if (op1.isUndef() || op2.isUndef()) return Value.getUndef();
+            switch (ae.getOperator()){
+                case ADD -> {return Value.makeConstant(op1.getConstant() + op2.getConstant());}
+                case SUB -> {return Value.makeConstant(op1.getConstant() - op2.getConstant());}
+                case MUL -> {return Value.makeConstant(op1.getConstant() * op2.getConstant());}
+                case DIV -> {if (op2.getConstant() == 0) return Value.getUndef(); else return Value.makeConstant(op1.getConstant() / op2.getConstant());}
+                case REM -> {if (op2.getConstant() == 0) return Value.getUndef(); else return Value.makeConstant(op1.getConstant() % op2.getConstant());}
+            }
+        }else if (exp instanceof  ConditionExp ce){
+            var op1 = evaluate(ce.getOperand1(), in);
+            var op2 = evaluate(ce.getOperand2(), in);
+            if (op1.isNAC() || op2.isNAC()) return Value.getNAC();
+            if (op1.isUndef() || op2.isUndef()) return Value.getUndef();
+            switch(ce.getOperator()){
+                case EQ -> {return (Value.makeConstant(op1.getConstant() == op2.getConstant() ? 1 : 0));}
+                case NE -> {return (Value.makeConstant(op1.getConstant() != op2.getConstant() ? 1 : 0));}
+                case GE -> {return (Value.makeConstant(op1.getConstant() >= op2.getConstant() ? 1 : 0));}
+                case GT -> {return (Value.makeConstant(op1.getConstant() > op2.getConstant() ? 1 : 0));}
+                case LE -> {return (Value.makeConstant(op1.getConstant() <= op2.getConstant() ? 1 : 0));}
+                case LT -> {return (Value.makeConstant(op1.getConstant() < op2.getConstant() ? 1 : 0));}
+            }
+        }else if (exp instanceof ShiftExp se){
+            var op1 = evaluate(se.getOperand1(), in);
+            var op2 = evaluate(se.getOperand2(), in);
+            if (op1.isNAC() || op2.isNAC()) return Value.getNAC();
+            if (op1.isUndef() || op2.isUndef()) return Value.getUndef();
+            switch (se.getOperator()){
+                case SHL -> {return Value.makeConstant(op1.getConstant() << op2.getConstant());}
+                case SHR -> {return Value.makeConstant(op1.getConstant() >> op2.getConstant());}
+                case USHR ->{return Value.makeConstant(op1.getConstant() >>> op2.getConstant());}
+            }
+        }else if (exp instanceof  BitwiseExp be){
+            var op1 = evaluate(be.getOperand1(), in);
+            var op2 = evaluate(be.getOperand2(), in);
+            if (op1.isNAC() || op2.isNAC()) return Value.getNAC();
+            if (op1.isUndef() || op2.isUndef()) return Value.getUndef();
+            switch (be.getOperator()){
+                case OR -> {return Value.makeConstant(op1.getConstant() | op2.getConstant());}
+                case AND -> {return Value.makeConstant(op1.getConstant() & op2.getConstant());}
+                case XOR -> {return Value.makeConstant(op1.getConstant() ^ op2.getConstant());}
+            }
+        }
+        return Value.getUndef();
     }
 }

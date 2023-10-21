@@ -77,7 +77,9 @@ public abstract class Solver<Node, Fact> {
     }
 
     protected void initializeForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        cfg.getNodes().forEach(node -> {
+            result.setOutFact(node, analysis.newInitialFact());
+        });
     }
 
     protected void initializeBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
