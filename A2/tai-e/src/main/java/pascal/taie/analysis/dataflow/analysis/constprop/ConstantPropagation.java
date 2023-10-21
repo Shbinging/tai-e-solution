@@ -76,7 +76,6 @@ public class ConstantPropagation extends
      * Meets two Values.
      */
     public Value meetValue(Value v1, Value v2) {
-        if (v1.isUndef() && v2.isUndef()) return Value.getUndef();
         if (v1.isUndef()) return v2;
         if (v2.isUndef()) return v1;
         if (v1.isNAC() || v2.isNAC()) return Value.getNAC();
@@ -130,17 +129,7 @@ public class ConstantPropagation extends
     public static Value evaluate(Exp exp, CPFact in) {
         if (exp instanceof Var v){
             return in.get(v);
-//            if (v.isTempConst()){
-//                if (v.getTempConstValue() instanceof IntLiteral i){
-//                    return Value.makeConstant(i.getValue());
-//                }else{
-//                    assert false:"literal should always be int";
-//                }
-//            }else{
-//                return in.get(v);
-//            }
         }
-
         if (exp instanceof IntLiteral){
             return Value.makeConstant(((IntLiteral) exp).getValue());
         }
