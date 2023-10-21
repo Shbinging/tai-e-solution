@@ -136,6 +136,11 @@ public class ConstantPropagation extends
         if (exp instanceof ArithmeticExp ae){
             var op1 = evaluate(ae.getOperand1(), in);
             var op2 = evaluate(ae.getOperand2(), in);
+            if (op2.isConstant() && op2.getConstant() == 0){
+                if (ae.getOperator() == ArithmeticExp.Op.DIV || ae.getOperator() == ArithmeticExp.Op.REM){
+                    return Value.getUndef();
+                }
+            }
             if (op1.isNAC() || op2.isNAC()) return Value.getNAC();
             if (op1.isUndef() || op2.isUndef()) return Value.getUndef();
             switch (ae.getOperator()){
