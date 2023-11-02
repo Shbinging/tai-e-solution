@@ -25,7 +25,6 @@ package pascal.taie.analysis.dataflow.analysis;
 import pascal.taie.analysis.MethodAnalysis;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
-import pascal.taie.analysis.dataflow.analysis.constprop.Value;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.dataflow.fact.SetFact;
 import pascal.taie.analysis.graph.cfg.CFG;
@@ -41,9 +40,9 @@ import pascal.taie.ir.exp.NewExp;
 import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.AssignStmt;
-import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
+import pascal.taie.ir.stmt.If;
 
 import java.util.Comparator;
 import java.util.Set;
@@ -57,13 +56,75 @@ public class DeadCodeDetection extends MethodAnalysis {
         super(config);
     }
 
-    void DfsCfg(Stmt stmt, Set<Stmt> reach_stmts){
-
+    Stmt getTypeEdgeDst(Stmt stmt, Edge.Kind kind, CFG<Stmt> cfg){
+        for (var next_edge: cfg.getOutEdgesOf(stmt)){
+            if (next_edge.getKind() == kind){
+                return next_edge.getTarget();
+            }
+        }
+        return null;
+    }
+    void dfsCfg(Stmt stmt, Set<Stmt> reach_stmts,  CFG<Stmt> cfg, DataflowResult<Stmt, CPFact> constants, DataflowResult<Stmt, SetFact<Var>> liveVars){
+        if (stmt == null){
+            return;
+        }
+        if (reach_stmts.contains(stmt)){
+            return;
+        }
+        reach_stmts.add(stmt);
+        if (stmt instanceof If istmt){
+            var cond_res = ConstantPropagation.evaluate(istmt.getCondition(), constants.getInFact(stmt));
+            if (cond_res.isConstant()){
+                Stmt next_stmt = null;
+                if (cond_res.getConstant() == 0){
+                    next_stmt = getTypeEdgeDst(stmt, Edge.Kind.IF_FALSE, cfg);
+                }else{
+                    next_stmt = getTypeEdgeDst(stmt, Edge.Kind.IF_TRUE, cfg);
+                }
+                assert next_stmt != null;
+                dfsCfg(next_stmt, reach_stmts, cfg, constants, liveVars);
+            }else{
+                for(var next_stmt:cfg.getSuccsOf(stmt)){
+                    dfsCfg(next_stmt, reach_stmts, cfg, constants, liveVars);
+                }
+            }
+        }else if (stmt instanceof SwitchStmt sstmt){
+            var cond_res = ConstantPropagation.evaluate(sstmt.getVar(), constants.getOutFact(stmt));
+            if (cond_res.isConstant()){
+                var val = cond_res.getConstant();
+                boolean match = false;
+                for (var p: sstmt.getCaseTargets()){
+                    if (val == p.first()){
+                        dfsCfg(p.second(), reach_stmts, cfg, constants, liveVars);
+                        match = true;
+                    }
+                }
+                if (!match){
+                    dfsCfg(sstmt.getDefaultTarget(), reach_stmts, cfg, constants, liveVars);
+                }
+            }else{
+                for(var next_stmt:cfg.getSuccsOf(stmt)){
+                    dfsCfg(next_stmt, reach_stmts, cfg, constants, liveVars);
+                }
+            }
+        }else if (stmt instanceof AssignStmt<?,?> astmt){
+            if(hasNoSideEffect(astmt.getRValue())){
+                if (astmt.getLValue() instanceof Var v){
+                    if (!liveVars.getResult(astmt).contains(v)){
+                        reach_stmts.remove(astmt);
+                    }
+                }
+            }
+            for(var next_stmt:cfg.getSuccsOf(stmt)){
+                dfsCfg(next_stmt, reach_stmts, cfg, constants, liveVars);
+            }
+        }else{
+            for(var next_stmt:cfg.getSuccsOf(stmt)){
+                dfsCfg(next_stmt,  reach_stmts, cfg, constants, liveVars);
+            }
+        }
     }
 
-    CFG<Stmt> cfg;
-    DataflowResult<Stmt, CPFact> constants;
-    DataflowResult<Stmt, SetFact<Var>> liveVars;
 
     @Override
     public Set<Stmt> analyze(IR ir) {
@@ -75,17 +136,19 @@ public class DeadCodeDetection extends MethodAnalysis {
         // obtain result of live variable analysis
         DataflowResult<Stmt, SetFact<Var>> liveVars =
                 ir.getResult(LiveVariableAnalysis.ID);
+
         // keep statements (dead code) sorted in the resulting set
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
-        this.cfg = cfg;
-        this.constants = constants;
-        this.liveVars = liveVars;
 
         Set<Stmt> reach_stmts = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        DfsCfg(cfg.getEntry(), reach_stmts);
-        deadCode.add(cfg.getEntry());
+        dfsCfg(cfg.getEntry(), reach_stmts, cfg, constants, liveVars);
+        for (var stmt: ir.getStmts()){
+            if (!reach_stmts.contains(stmt)){
+                deadCode.add(stmt);
+            }
+        }
         return deadCode;
     }
 
