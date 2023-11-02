@@ -31,7 +31,8 @@ public class DeadCodeTest {
         Tests.test(inputClass, "src/test/resources/dataflow/deadcode/",
                 DeadCodeDetection.ID,
                 "-a", "livevar=strongly:false",
-                "-a", "constprop=edge-refine:false");
+                "-a", "constprop=edge-refine:false",
+                "-a", "cfg=dump:true");
     }
 
     @Test
