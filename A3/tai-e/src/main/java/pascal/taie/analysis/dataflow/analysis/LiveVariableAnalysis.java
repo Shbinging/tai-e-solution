@@ -22,11 +22,15 @@
 
 package pascal.taie.analysis.dataflow.analysis;
 
+import fj.P;
 import pascal.taie.analysis.dataflow.fact.SetFact;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
+import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Stmt;
+
+import java.util.Vector;
 
 /**
  * Implementation of classic live variable analysis.
@@ -47,24 +51,44 @@ public class LiveVariableAnalysis extends
 
     @Override
     public SetFact<Var> newBoundaryFact(CFG<Stmt> cfg) {
-        // TODO - finish me
-        return null;
+        // TOD - finish me
+        SetFact<Var> v = new SetFact<Var>();
+        return v;
     }
 
     @Override
     public SetFact<Var> newInitialFact() {
-        // TODO - finish me
-        return null;
+        // TOD - finish me
+        SetFact<Var> v = new SetFact<Var>();
+        return v;
     }
 
     @Override
     public void meetInto(SetFact<Var> fact, SetFact<Var> target) {
-        // TODO - finish me
-    }
+        // TOD - finish me
+        target.union(fact);
+}
 
     @Override
     public boolean transferNode(Stmt stmt, SetFact<Var> in, SetFact<Var> out) {
-        // TODO - finish me
-        return false;
+        // TOD - finish me
+        // in = out - def + use
+        var tmpSet = out.copy();
+        if (!stmt.getDef().isEmpty()){
+            if (stmt.getDef().get() instanceof Var) {
+                tmpSet.remove((Var) stmt.getDef().get());
+            }
+        }
+        for(RValue useV:stmt.getUses()) {
+            if(useV instanceof Var) {
+                tmpSet.add((Var) useV);
+            }
+        }
+        if (tmpSet.equals(in)){
+            return false;
+        }else{
+            in.set(tmpSet);
+            return true;
+        }
     }
 }
