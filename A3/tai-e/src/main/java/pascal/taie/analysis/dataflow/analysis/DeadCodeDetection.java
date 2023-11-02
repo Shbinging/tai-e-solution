@@ -57,6 +57,14 @@ public class DeadCodeDetection extends MethodAnalysis {
         super(config);
     }
 
+    void DfsCfg(Stmt stmt, Set<Stmt> reach_stmts){
+
+    }
+
+    CFG<Stmt> cfg;
+    DataflowResult<Stmt, CPFact> constants;
+    DataflowResult<Stmt, SetFact<Var>> liveVars;
+
     @Override
     public Set<Stmt> analyze(IR ir) {
         // obtain CFG
@@ -71,6 +79,13 @@ public class DeadCodeDetection extends MethodAnalysis {
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
+        this.cfg = cfg;
+        this.constants = constants;
+        this.liveVars = liveVars;
+
+        Set<Stmt> reach_stmts = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        DfsCfg(cfg.getEntry(), reach_stmts);
+        deadCode.add(cfg.getEntry());
         return deadCode;
     }
 
