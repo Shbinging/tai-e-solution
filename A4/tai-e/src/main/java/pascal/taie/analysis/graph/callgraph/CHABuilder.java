@@ -49,6 +49,7 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
     private CallGraph<Invoke, JMethod> buildCallGraph(JMethod entry) {
         DefaultCallGraph callGraph = new DefaultCallGraph();
         callGraph.addEntryMethod(entry);
+        callGraph.addReachableMethod(entry);
         var RM = new HashSet<JMethod>();
         Queue<JMethod> WL = new LinkedList<>();
         WL.add(entry);
@@ -56,14 +57,16 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
             var m = WL.poll();
             if (!RM.contains(m)){
                 RM.add(m);
-                for(var cs: callGraph.getCallSitesIn(m)){
-                    var T = resolve(cs);
-                    for(var m1: T){
-                        if (!callGraph.contains(m1)){
-                            callGraph.addReachableMethod(m1);
+                for(var stmt: m.getIR()){
+                    if (stmt instanceof Invoke cs){
+                        var T = resolve(cs);
+                        for(var m1: T){
+                            if (!callGraph.contains(m1)){
+                                callGraph.addReachableMethod(m1);
+                            }
+                            callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(cs.getInvokeExp()), cs, m1));
+                            WL.add(m1);
                         }
-                        callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(cs.getInvokeExp()), cs, m1));
-                        WL.add(m1);
                     }
                 }
             }
@@ -73,7 +76,7 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
 
 
     private void dfsDispatch(JClass cur_class, Subsignature subsignature, Set<JMethod> T){
-        T.add(dispatch(cur_class, subsignature));
+        if (!dispatch(cur_class, subsignature).isAbstract())  T.add(dispatch(cur_class, subsignature));
         for(var subclass: hierarchy.getDirectSubclassesOf(cur_class)){
             dfsDispatch(subclass, subsignature, T);
         }
@@ -83,15 +86,18 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      */
     private Set<JMethod> resolve(Invoke callSite) {
         var T = new HashSet<JMethod>();
-        var m = callSite.getMethodRef().resolve();
+        var cls = callSite.getMethodRef().getDeclaringClass();
+        var subsig = callSite.getMethodRef().getSubsignature();
         if (callSite.isStatic()){
-            T.add(m);
+            T.add(dispatch(cls, subsig));
         }else if (callSite.isSpecial()){
-            var cm = m.getDeclaringClass();
-            T.add(dispatch(cm, m.getSubsignature()));
+            T.add(dispatch(cls, subsig));
         }else if (callSite.isVirtual()){
-            assert m.getDeclaringClass() != null;
-            dfsDispatch(m.getDeclaringClass(), m.getSubsignature(), T);
+            dfsDispatch(cls, subsig, T);
+        }else if (callSite.isInterface()){
+            for (var implcls: hierarchy.getDirectImplementorsOf(cls)){
+                dfsDispatch(implcls, subsig, T);
+            }
         }
         return T;
     }

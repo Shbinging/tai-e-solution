@@ -119,8 +119,8 @@ public class InterConstantPropagation extends
     @Override
     protected CPFact transferReturnEdge(ReturnEdge<Stmt> edge, CPFact returnOut) {
         CPFact fact = new CPFact();
-        if (edge.getSource().getDef().isPresent()) {
-            Var lvar = (Var) edge.getSource().getDef().get();
+        if (edge.getCallSite().getDef().isPresent()) {
+            Var lvar = (Var) edge.getCallSite().getDef().get();
             for (var return_var : edge.getReturnVars()) {
                 fact.update(lvar, cp.meetValue(fact.get(lvar), returnOut.get(return_var)));
             }
