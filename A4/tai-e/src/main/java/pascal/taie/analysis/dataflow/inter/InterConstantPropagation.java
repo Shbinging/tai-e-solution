@@ -22,6 +22,7 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
+import org.checkerframework.checker.units.qual.C;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
 import pascal.taie.analysis.graph.cfg.CFG;
@@ -76,37 +77,54 @@ public class InterConstantPropagation extends
 
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        return out.copyFrom(in);
     }
 
     @Override
     protected boolean transferNonCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        return cp.transferNode(stmt, in, out);
     }
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
-        return null;
+        //FIXME we can just return out
+        CPFact fact = new CPFact();
+        fact.copyFrom(out);
+        return fact;
     }
 
     @Override
     protected CPFact transferCallToReturnEdge(CallToReturnEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
-        return null;
+        CPFact fact = new CPFact();
+        fact.copyFrom(out);
+        if (edge.getSource().getDef().isPresent()) {
+            Var lvar = (Var) edge.getSource().getDef().get();
+            fact.remove(lvar);
+        }
+        return fact;
     }
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
-        // TODO - finish me
-        return null;
+        InvokeExp exp = ((Invoke) edge.getSource()).getInvokeExp();
+        var callee = edge.getCallee().getIR();
+        assert exp.getArgCount() == callee.getParams().size();
+        CPFact fact = new CPFact();
+        for(int i = 0; i < exp.getArgCount(); i++){
+            fact.update(callee.getParam(i), callSiteOut.get(exp.getArg(i)));
+        }
+        return fact;
     }
 
     @Override
     protected CPFact transferReturnEdge(ReturnEdge<Stmt> edge, CPFact returnOut) {
-        // TODO - finish me
-        return null;
+        CPFact fact = new CPFact();
+        if (edge.getSource().getDef().isPresent()) {
+            Var lvar = (Var) edge.getSource().getDef().get();
+            for (var return_var : edge.getReturnVars()) {
+                fact.update(lvar, cp.meetValue(fact.get(lvar), returnOut.get(return_var)));
+            }
+        }
+        return fact;
     }
 }
