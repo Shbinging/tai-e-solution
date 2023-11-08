@@ -88,6 +88,7 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
             dfsIntf(subintf, subsig, T);
         }
     }
+
     /**
      * Resolves call targets (callees) of a call site via CHA.
      */
