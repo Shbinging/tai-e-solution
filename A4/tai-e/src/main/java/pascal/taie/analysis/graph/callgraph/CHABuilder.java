@@ -73,10 +73,19 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
     }
 
 
-    private void dfsDispatch(JClass cur_class, Subsignature subsignature, Set<JMethod> T){
+    private void dfsClass(JClass cur_class, Subsignature subsignature, Set<JMethod> T){
         if (!dispatch(cur_class, subsignature).isAbstract())  T.add(dispatch(cur_class, subsignature));
         for(var subclass: hierarchy.getDirectSubclassesOf(cur_class)){
-            dfsDispatch(subclass, subsignature, T);
+            dfsClass(subclass, subsignature, T);
+        }
+    }
+
+    private void dfsIntf(JClass cls,Subsignature subsig, Set<JMethod> T){
+        for (var implcls: hierarchy.getDirectImplementorsOf(cls)){
+            dfsClass(implcls, subsig, T);
+        }
+        for (var subintf: hierarchy.getDirectSubinterfacesOf(cls)){
+            dfsIntf(subintf, subsig, T);
         }
     }
     /**
@@ -91,11 +100,9 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
         }else if (callSite.isSpecial()){
             T.add(dispatch(cls, subsig));
         }else if (callSite.isVirtual()){
-            dfsDispatch(cls, subsig, T);
+            dfsClass(cls, subsig, T);
         }else if (callSite.isInterface()){
-            for (var implcls: hierarchy.getDirectImplementorsOf(cls)){
-                dfsDispatch(implcls, subsig, T);
-            }
+            dfsIntf(cls, subsig, T);
         }
         return T;
     }
