@@ -87,7 +87,6 @@ public class InterConstantPropagation extends
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
-        //FIXME we can just return out
         CPFact fact = new CPFact();
         fact.copyFrom(out);
         return fact;
