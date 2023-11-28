@@ -107,14 +107,11 @@ class Solver {
     private Pointer getVarPtr(Var var){
         return pointerFlowGraph.getVarPtr(var);
     }
+
     /**
      * Processes statements in new reachable methods.
      */
     private class StmtProcessor implements StmtVisitor<Void> {
-        // TODO - if you choose to implement addReachable()
-        //  via visitor pattern, then finish me
-
-
         @Override
         public Void visit(Invoke stmt) {
             if (stmt.isStatic()){
@@ -166,18 +163,6 @@ class Solver {
             }
             return StmtVisitor.super.visit(stmt);
         }
-
-//        @Override
-//        public Void visit(LoadArray stmt) {
-//            return StmtVisitor.super.visit(stmt);
-//        }
-//
-//        @Override
-//        public Void visit(StoreArray stmt) {
-//            return StmtVisitor.super.visit(stmt);
-//        }
-
-
     }
 
     /**
@@ -218,6 +203,7 @@ class Solver {
                     x.getStoreArrays().forEach(storeArray -> {
                         addPFGEdge(getVarPtr(storeArray.getRValue()), pointerFlowGraph.getArrayIndex(o));
                     });
+                    processCall(x, o);
                 }
             }
         }
@@ -248,6 +234,7 @@ class Solver {
     private void processCall(Var var, Obj recv) {
         for(var stmt: var.getInvokes()){
             var m = resolveCallee(recv, stmt);
+            workList.addEntry(getVarPtr(m.getIR().getThis()), new PointsToSet(recv));
             if (!callGraph.getCalleesOf(stmt).contains(m)){
                 CallKind kind = null;
                 if (stmt.isInterface()) kind = CallKind.INTERFACE;
@@ -265,7 +252,7 @@ class Solver {
                 }
                 if (stmt.getLValue() != null){
                     var ret = stmt.getLValue();
-                    for(var fret: resolveCallee(null, stmt).getIR().getReturnVars()){
+                    for(var fret: m.getIR().getReturnVars()){
                         addPFGEdge(getVarPtr(fret), getVarPtr(ret));
                     }
                 }
