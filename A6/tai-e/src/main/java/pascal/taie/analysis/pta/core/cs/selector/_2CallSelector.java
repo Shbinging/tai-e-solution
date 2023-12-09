@@ -43,9 +43,9 @@ public class _2CallSelector implements ContextSelector {
 
     @Override
     public Context selectContext(CSCallSite callSite, JMethod callee) {
-        var oldContext = callSite.getContext();
-        if (oldContext.getLength() > 0){
-            ListContext.make(oldContext.getElementAt(oldContext.getLength() - 1), callSite.getCallSite());
+        var old = callSite.getContext();
+        if (old.getLength() > 0){
+            return ListContext.make(old.getElementAt(old.getLength() - 1), callSite.getCallSite());
         }else{
             return ListContext.make(callSite.getCallSite());
         }
