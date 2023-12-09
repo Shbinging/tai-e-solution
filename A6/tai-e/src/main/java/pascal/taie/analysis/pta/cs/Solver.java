@@ -112,7 +112,7 @@ class Solver {
      */
     private void addReachable(CSMethod csMethod) {
         if (!callGraph.contains(csMethod)){
-            addReachable(csMethod);
+            callGraph.addReachableMethod(csMethod);
             csMethod.getMethod().getIR().getStmts().forEach(stmt -> stmt.accept(new StmtProcessor(csMethod)));
         }
 
@@ -197,7 +197,7 @@ class Solver {
             if (callSite.isSpecial()) callkind = CallKind.SPECIAL;
             if (callSite.isVirtual()) callkind = CallKind.VIRTUAL;
             if (callSite.isInterface()) callkind = CallKind.INTERFACE;
-            if (callSite.isSpecial()) callkind = CallKind.STATIC;
+            if (callSite.isStatic()) callkind = CallKind.STATIC;
             if(callkind != null){
                 callGraph.addEdge(new Edge<>(callkind, csCallsite, callee));
                 addReachable(callee);
