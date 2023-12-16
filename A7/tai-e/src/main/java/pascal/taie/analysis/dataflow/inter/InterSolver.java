@@ -22,14 +22,22 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
+import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
+import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
+import pascal.taie.analysis.dataflow.analysis.constprop.Value;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
-import pascal.taie.util.collection.SetQueue;
+import pascal.taie.ir.exp.InstanceFieldAccess;
+import pascal.taie.ir.exp.StaticFieldAccess;
+import pascal.taie.ir.stmt.Stmt;
+import pascal.taie.ir.stmt.StoreArray;
+import pascal.taie.ir.stmt.StoreField;
+import pascal.taie.util.collection.Pair;
 
 import java.util.LinkedList;
 import java.util.Queue;
-import java.util.Set;
-import java.util.stream.Collectors;
+
+import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.*;
 
 /**
  * Solver for inter-procedural data-flow analysis.
@@ -64,8 +72,66 @@ class InterSolver<Method, Node, Fact> {
         icfg.entryMethods().forEach(method -> {result.setOutFact(icfg.getEntryOf(method), analysis.newBoundaryFact(icfg.getEntryOf(method)));});
     }
 
+    private void doStore(Stmt stmt, CPFact in){
+        if (stmt instanceof StoreField store_stmt){
+            if (!ConstantPropagation.canHoldInt(store_stmt.getRValue())) return;
+            if (store_stmt.getFieldAccess() instanceof InstanceFieldAccess access){
+                for(var obj: pta.getPointsToSet(access.getBase())){
+                    var key = new Pair<>(obj, access.getFieldRef());
+                    var in_val = valMap.getOrDefault(key, Value.getUndef());
+                    var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_stmt.getRValue(), in), in_val);
+                    if (!out_val.equals(in_val)){
+                        //update worklist
+                        valMap.put(key, out_val);
+                        for(var alia_v: aliasMap.get(obj)){
+                            for(var loadstmt: alia_v.getStoreFields()){
+                                if (loadstmt.getFieldAccess().getFieldRef().equals(access.getFieldRef())){
+                                    workList.add((Node) loadstmt);
+                                }
+                            }
+                        }
+                    }
+                }
+            }else if (store_stmt.getFieldAccess() instanceof StaticFieldAccess access){
+                var key = new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef());
+                var in_val = valMap.getOrDefault(key, Value.getUndef());
+                var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_stmt.getRValue(), in), in_val);
+                if (!out_val.equals(in_val)){
+                    //update worklist
+                    valMap.put(key, out_val);
+                    if (staticLoadFields.containsKey(key)){
+                        for(var loadstmt: staticLoadFields.get(key)){
+                            workList.add((Node) loadstmt);
+                        }
+                    }
+                }
+            }
+        }
+        if (stmt instanceof StoreArray store_array){
+            if (!ConstantPropagation.canHoldInt(store_array.getRValue())) return;
+            var index = ConstantPropagation.evaluate(store_array.getArrayAccess().getIndex(), in);
+            if (index.isUndef()) return;
+            var base = store_array.getArrayAccess().getBase();
+            for(var obj: pta.getPointsToSet(base)){
+                var key = new Pair<>(obj, index);
+                var in_val = valMap.getOrDefault(key, Value.getUndef());
+                var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_array.getRValue(), in), in_val);
+                if (!out_val.equals(in_val)){
+                    valMap.put(key, out_val);
+                    //we may add some array store which not need to update
+                    for(var alias_v:aliasMap.get(obj)){
+                        alias_v.getStoreArrays().forEach(loadstmt-> {
+                            workList.add((Node) loadstmt);
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     private void doSolve() {
         Queue<Node> wl = new LinkedList<>(icfg.getNodes());
+        workList = wl;
         while(!wl.isEmpty()){
             var b = wl.poll();
             var in = analysis.newInitialFact();
@@ -73,9 +139,12 @@ class InterSolver<Method, Node, Fact> {
                 analysis.meetInto(analysis.transferEdge(edge, result.getOutFact(edge.getSource())), in);
             });
             result.setInFact(b, in);
+            //This is for x = ....
             if (analysis.transferNode(b, in, result.getOutFact(b))){
                 wl.addAll(icfg.getSuccsOf(b));
             }
+            //This is for x.x = ...
+            doStore((Stmt) b, (CPFact) in);
         }
     }
 }

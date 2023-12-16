@@ -25,6 +25,7 @@ package pascal.taie.analysis.dataflow.inter;
 import pascal.taie.World;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
+import pascal.taie.analysis.dataflow.analysis.constprop.Value;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.icfg.CallEdge;
@@ -36,10 +37,15 @@ import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.InvokeExp;
+import pascal.taie.ir.exp.StaticFieldAccess;
 import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.proginfo.FieldRef;
 import pascal.taie.ir.stmt.Invoke;
+import pascal.taie.ir.stmt.LoadField;
 import pascal.taie.ir.stmt.Stmt;
+import pascal.taie.language.classes.JClass;
 import pascal.taie.language.classes.JMethod;
+import pascal.taie.util.collection.Pair;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -61,19 +67,30 @@ public class InterConstantPropagation extends
         cp = new ConstantPropagation(new AnalysisConfig(ConstantPropagation.ID));
     }
 
-    private Map<Obj, Set<Var>> aliasMap;
+    public static final Map<Obj, Set<Var>> aliasMap = new HashMap<>();
+    public static final Map<Pair<?, ?>, Value> valMap = new HashMap<>();
+    public static final Map<Pair<JClass, FieldRef>, Set<LoadField>> staticLoadFields = new HashMap<>();
+
+    public static PointerAnalysisResult pta;
     @Override
     protected void initialize() {
         String ptaId = getOptions().getString("pta");
-        PointerAnalysisResult pta = World.get().getResult(ptaId);
+        pta = World.get().getResult(ptaId);
         // You can do initialization work here
-        aliasMap = new HashMap<>();
         for(var ptr_v: pta.getVars()){
             pta.getPointsToSet(ptr_v).forEach(obj -> {
                 if (!aliasMap.containsKey(obj)) aliasMap.put(obj, new HashSet<>());
                 aliasMap.get(obj).add(ptr_v);
             });
         }
+        icfg.getNodes().forEach(stmt -> {
+            if(stmt instanceof LoadField s && s.getFieldAccess() instanceof StaticFieldAccess access){
+                Pair<JClass, FieldRef> accessPair = new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef());
+                Set<LoadField> set = staticLoadFields.getOrDefault(accessPair, new HashSet<>());
+                set.add(s);
+                staticLoadFields.put(accessPair, set);
+            }
+        });
     }
 
     @Override
