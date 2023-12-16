@@ -22,7 +22,6 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
-import pascal.taie.Assignment;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
 import pascal.taie.analysis.dataflow.analysis.constprop.Value;
@@ -30,7 +29,6 @@ import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
 import pascal.taie.ir.exp.InstanceFieldAccess;
 import pascal.taie.ir.exp.StaticFieldAccess;
-import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.StoreArray;
 import pascal.taie.ir.stmt.StoreField;
@@ -80,12 +78,12 @@ class InterSolver<Method, Node, Fact> {
             if (store_stmt.getFieldAccess() instanceof InstanceFieldAccess access){
                 for(var obj: pta.getPointsToSet(access.getBase())){
                     var key = new Pair<>(obj, access.getFieldRef());
-                    var in_val = valMap.getOrDefault(key, Value.getUndef());
+                    var in_val = objFiledToVal.getOrDefault(key, Value.getUndef());
                     var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_stmt.getRValue(), in), in_val);
                     if (!out_val.equals(in_val)){
                         //update worklist
-                        valMap.put(key, out_val);
-                        for(var alia_v: aliasMap.get(obj)){
+                        objFiledToVal.put(key, out_val);
+                        for(var alia_v: aliaVars.get(obj)){
                             for(var loadstmt: alia_v.getLoadFields()){
                                 if (loadstmt.getFieldAccess().getFieldRef().equals(access.getFieldRef())){
                                     workList.add((Node) loadstmt);
@@ -96,13 +94,13 @@ class InterSolver<Method, Node, Fact> {
                 }
             }else if (store_stmt.getFieldAccess() instanceof StaticFieldAccess access){
                 var key = new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef());
-                var in_val = valMap.getOrDefault(key, Value.getUndef());
+                var in_val = objFiledToVal.getOrDefault(key, Value.getUndef());
                 var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_stmt.getRValue(), in), in_val);
                 if (!out_val.equals(in_val)){
                     //update worklist
-                    valMap.put(key, out_val);
-                    if (staticLoadFields.containsKey(key)){
-                        for(var loadstmt: staticLoadFields.get(key)){
+                    objFiledToVal.put(key, out_val);
+                    if (staticFields.containsKey(key)){
+                        for(var loadstmt: staticFields.get(key)){
                             workList.add((Node) loadstmt);
                         }
                     }
@@ -116,12 +114,12 @@ class InterSolver<Method, Node, Fact> {
             var base = store_array.getArrayAccess().getBase();
             for(var obj: pta.getPointsToSet(base)){
                 var key = new Pair<>(obj, index);
-                var in_val = valMap.getOrDefault(key, Value.getUndef());
+                var in_val = objFiledToVal.getOrDefault(key, Value.getUndef());
                 var out_val = ConstantPropagation.meetValue(ConstantPropagation.evaluate(store_array.getRValue(), in), in_val);
                 if (!out_val.equals(in_val)){
-                    valMap.put(key, out_val);
+                    objFiledToVal.put(key, out_val);
                     //we may add some array store which not need to update
-                    for(var alias_v:aliasMap.get(obj)){
+                    for(var alias_v: aliaVars.get(obj)){
                         alias_v.getLoadArrays().forEach(loadstmt-> {
                             workList.add((Node) loadstmt);
                         });

@@ -26,7 +26,6 @@ import pascal.taie.World;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
 import pascal.taie.analysis.dataflow.analysis.constprop.Value;
-import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.icfg.CallEdge;
 import pascal.taie.analysis.graph.icfg.CallToReturnEdge;
@@ -67,9 +66,9 @@ public class InterConstantPropagation extends
         cp = new ConstantPropagation(new AnalysisConfig(ConstantPropagation.ID));
     }
 
-    public static final Map<Obj, Set<Var>> aliasMap = new HashMap<>();
-    public static final Map<Pair<?, ?>, Value> valMap = new HashMap<>();
-    public static final Map<Pair<JClass, FieldRef>, Set<LoadField>> staticLoadFields = new HashMap<>();
+    public static final Map<Obj, Set<Var>> aliaVars = new HashMap<>();
+    public static final Map<Pair<?, ?>, Value> objFiledToVal = new HashMap<>();
+    public static final Map<Pair<JClass, FieldRef>, Set<LoadField>> staticFields = new HashMap<>();
 
     public static PointerAnalysisResult pta;
     @Override
@@ -79,18 +78,19 @@ public class InterConstantPropagation extends
         // You can do initialization work here
         for(var ptr_v: pta.getVars()){
             pta.getPointsToSet(ptr_v).forEach(obj -> {
-                if (!aliasMap.containsKey(obj)) aliasMap.put(obj, new HashSet<>());
-                aliasMap.get(obj).add(ptr_v);
+                if (!aliaVars.containsKey(obj)) aliaVars.put(obj, new HashSet<>());
+                aliaVars.get(obj).add(ptr_v);
             });
         }
-        icfg.getNodes().forEach(stmt -> {
+        for(var stmt: icfg.getNodes()){
             if(stmt instanceof LoadField s && s.getFieldAccess() instanceof StaticFieldAccess access){
-                Pair<JClass, FieldRef> accessPair = new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef());
-                Set<LoadField> set = staticLoadFields.getOrDefault(accessPair, new HashSet<>());
-                set.add(s);
-                staticLoadFields.put(accessPair, set);
+                var key = new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef());
+                if (!staticFields.containsKey(key)){
+                    staticFields.put(key, new HashSet<>());
+                }
+                staticFields.get(key).add(s);
             }
-        });
+        }
     }
 
     @Override

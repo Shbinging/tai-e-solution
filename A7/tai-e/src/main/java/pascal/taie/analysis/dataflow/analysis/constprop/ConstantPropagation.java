@@ -24,23 +24,16 @@ package pascal.taie.analysis.dataflow.analysis.constprop;
 
 import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
-import pascal.taie.analysis.pta.core.cs.element.InstanceField;
-import pascal.taie.analysis.pta.core.cs.element.StaticField;
-import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.config.AnalysisConfig;
-import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.*;
 import pascal.taie.util.collection.Pair;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
-import pascal.taie.util.AnalysisException;
+
 import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.pta;
-import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.valMap;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.objFiledToVal;
 
 public class ConstantPropagation extends
         AbstractDataflowAnalysis<Stmt, CPFact> {
@@ -195,22 +188,22 @@ public class ConstantPropagation extends
         }else if (exp instanceof InstanceFieldAccess access){
             var val = Value.getUndef();
             for (var obj: pta.getPointsToSet(access.getBase())){
-                val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, access.getFieldRef()), Value.getUndef()));
+                val = meetValue(val, objFiledToVal.getOrDefault(new Pair<>(obj, access.getFieldRef()), Value.getUndef()));
             }
             return val;
         }else if (exp instanceof StaticFieldAccess access){
-            return valMap.getOrDefault(new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef()), Value.getUndef());
+            return objFiledToVal.getOrDefault(new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef()), Value.getUndef());
         }else if (exp instanceof ArrayAccess access){
             var idx = evaluate(access.getIndex(), in);
             var val = Value.getUndef();
             if (idx.isConstant()){
                 for(var obj: pta.getPointsToSet(access.getBase())){
-                    val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, idx), Value.getUndef()));
-                    val = meetValue(val , valMap.getOrDefault(new Pair<>(obj, Value.getNAC()), Value.getUndef()));
+                    val = meetValue(val, objFiledToVal.getOrDefault(new Pair<>(obj, idx), Value.getUndef()));
+                    val = meetValue(val , objFiledToVal.getOrDefault(new Pair<>(obj, Value.getNAC()), Value.getUndef()));
                 }
             }else if (idx.isNAC()){
                 for(var obj: pta.getPointsToSet(access.getBase())){
-                    for(var entry: valMap.entrySet()){
+                    for(var entry: objFiledToVal.entrySet()){
                         if (entry.getKey().first() == obj && entry.getKey().second() instanceof Value v){
                             if (!v.isNAC()){
                                 val = meetValue(val, entry.getValue());
