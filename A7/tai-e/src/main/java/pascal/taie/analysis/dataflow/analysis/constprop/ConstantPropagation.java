@@ -26,14 +26,21 @@ import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.analysis.pta.core.cs.element.InstanceField;
 import pascal.taie.analysis.pta.core.cs.element.StaticField;
+import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.*;
+import pascal.taie.util.collection.Pair;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
+import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.pta;
+import static pascal.taie.analysis.dataflow.inter.InterConstantPropagation.valMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 public class ConstantPropagation extends
         AbstractDataflowAnalysis<Stmt, CPFact> {
@@ -77,7 +84,7 @@ public class ConstantPropagation extends
     /**
      * Meets two Values.
      */
-    public Value meetValue(Value v1, Value v2) {
+    public static Value meetValue(Value v1, Value v2) {
         if (v1.isUndef()) return v2;
         if (v2.isUndef()) return v1;
         if (v1.isNAC() || v2.isNAC()) return Value.getNAC();
@@ -116,6 +123,9 @@ public class ConstantPropagation extends
         }
         return false;
     }
+
+
+
 
     /**
      * Evaluates the {@link Value} of given expression.
@@ -183,12 +193,37 @@ public class ConstantPropagation extends
                 case XOR -> {return Value.makeConstant(op1.getConstant() ^ op2.getConstant());}
             }
         }else if (exp instanceof InstanceFieldAccess access){
-
+            var val = Value.getUndef();
+            for (var obj: pta.getPointsToSet(access.getBase())){
+                val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, access.getFieldRef()), Value.getUndef()));
+            }
+            return val;
         }else if (exp instanceof StaticFieldAccess access){
-
+            return valMap.getOrDefault(new Pair<>(access.getFieldRef().getDeclaringClass(), access.getFieldRef()), Value.getUndef());
         }else if (exp instanceof ArrayAccess access){
-
+            var idx = evaluate(access.getIndex(), in);
+            var val = Value.getUndef();
+            if (idx.isConstant()){
+                for(var obj: pta.getPointsToSet(access.getBase())){
+                    val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, idx.getConstant()), Value.getUndef()));
+                    val = meetValue(val , valMap.getOrDefault(new Pair<>(obj, Value.getNAC()), Value.getUndef()));
+                }
+            }else if (idx.isNAC()){
+                for(var obj: pta.getPointsToSet(access.getBase())){
+                    for(var entry: valMap.entrySet()){
+                        if (entry.getKey().first() == obj && entry.getKey().second() instanceof Value v){
+                            if (!v.isNAC()){
+                                val = meetValue(val, entry.getValue());
+                            }
+                        }
+                    }
+                }
+            }else if (idx.isUndef()){
+                val = Value.getUndef();
+            }
+            return val;
         }
         return Value.getNAC();
     }
+
 }
