@@ -32,6 +32,7 @@ import pascal.taie.analysis.graph.icfg.CallToReturnEdge;
 import pascal.taie.analysis.graph.icfg.NormalEdge;
 import pascal.taie.analysis.graph.icfg.ReturnEdge;
 import pascal.taie.analysis.pta.PointerAnalysisResult;
+import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.InvokeExp;
@@ -39,6 +40,11 @@ import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.classes.JMethod;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Implementation of interprocedural constant propagation for int values.
@@ -55,11 +61,19 @@ public class InterConstantPropagation extends
         cp = new ConstantPropagation(new AnalysisConfig(ConstantPropagation.ID));
     }
 
+    private Map<Obj, Set<Var>> aliasMap;
     @Override
     protected void initialize() {
         String ptaId = getOptions().getString("pta");
         PointerAnalysisResult pta = World.get().getResult(ptaId);
         // You can do initialization work here
+        aliasMap = new HashMap<>();
+        for(var ptr_v: pta.getVars()){
+            pta.getPointsToSet(ptr_v).forEach(obj -> {
+                if (!aliasMap.containsKey(obj)) aliasMap.put(obj, new HashSet<>());
+                aliasMap.get(obj).add(ptr_v);
+            });
+        }
     }
 
     @Override
@@ -85,37 +99,51 @@ public class InterConstantPropagation extends
 
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        return out.copyFrom(in);
     }
 
     @Override
     protected boolean transferNonCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        return cp.transferNode(stmt, in, out);
     }
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
-        return null;
+        return out.copy();
     }
 
     @Override
     protected CPFact transferCallToReturnEdge(CallToReturnEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
-        return null;
+        CPFact fact = new CPFact();
+        fact.copyFrom(out);
+        if (edge.getSource().getDef().isPresent()) {
+            Var lvar = (Var) edge.getSource().getDef().get();
+            fact.remove(lvar);
+        }
+        return fact;
     }
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
-        // TODO - finish me
-        return null;
+        InvokeExp exp = ((Invoke) edge.getSource()).getInvokeExp();
+        var callee = edge.getCallee().getIR();
+        assert exp.getArgCount() == callee.getParams().size();
+        CPFact fact = new CPFact();
+        for(int i = 0; i < exp.getArgCount(); i++){
+            fact.update(callee.getParam(i), callSiteOut.get(exp.getArg(i)));
+        }
+        return fact;
     }
 
     @Override
     protected CPFact transferReturnEdge(ReturnEdge<Stmt> edge, CPFact returnOut) {
-        // TODO - finish me
-        return null;
+        CPFact fact = new CPFact();
+        if (edge.getCallSite().getDef().isPresent()) {
+            Var lvar = (Var) edge.getCallSite().getDef().get();
+            for (var return_var : edge.getReturnVars()) {
+                fact.update(lvar, cp.meetValue(fact.get(lvar), returnOut.get(return_var)));
+            }
+        }
+        return fact;
     }
 }
