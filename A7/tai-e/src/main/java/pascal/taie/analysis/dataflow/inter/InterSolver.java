@@ -22,6 +22,7 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
+import pascal.taie.Assignment;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
 import pascal.taie.analysis.dataflow.analysis.constprop.Value;
@@ -29,6 +30,7 @@ import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
 import pascal.taie.ir.exp.InstanceFieldAccess;
 import pascal.taie.ir.exp.StaticFieldAccess;
+import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.StoreArray;
 import pascal.taie.ir.stmt.StoreField;
@@ -84,7 +86,7 @@ class InterSolver<Method, Node, Fact> {
                         //update worklist
                         valMap.put(key, out_val);
                         for(var alia_v: aliasMap.get(obj)){
-                            for(var loadstmt: alia_v.getStoreFields()){
+                            for(var loadstmt: alia_v.getLoadFields()){
                                 if (loadstmt.getFieldAccess().getFieldRef().equals(access.getFieldRef())){
                                     workList.add((Node) loadstmt);
                                 }
@@ -120,7 +122,7 @@ class InterSolver<Method, Node, Fact> {
                     valMap.put(key, out_val);
                     //we may add some array store which not need to update
                     for(var alias_v:aliasMap.get(obj)){
-                        alias_v.getStoreArrays().forEach(loadstmt-> {
+                        alias_v.getLoadArrays().forEach(loadstmt-> {
                             workList.add((Node) loadstmt);
                         });
                     }
@@ -138,13 +140,16 @@ class InterSolver<Method, Node, Fact> {
             icfg.getInEdgesOf(b).forEach(edge -> {
                 analysis.meetInto(analysis.transferEdge(edge, result.getOutFact(edge.getSource())), in);
             });
-            result.setInFact(b, in);
             //This is for x = ....
+            result.setInFact(b, in);
             if (analysis.transferNode(b, in, result.getOutFact(b))){
                 wl.addAll(icfg.getSuccsOf(b));
             }
             //This is for x.x = ...
             doStore((Stmt) b, (CPFact) in);
         }
+//        for (var node: icfg.getNodes()){
+//            System.out.printf("%s %s\n", node.toString(), result.getResult((Stmt) node));
+//        }
     }
 }

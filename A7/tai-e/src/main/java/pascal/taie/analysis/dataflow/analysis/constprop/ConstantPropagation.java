@@ -205,7 +205,7 @@ public class ConstantPropagation extends
             var val = Value.getUndef();
             if (idx.isConstant()){
                 for(var obj: pta.getPointsToSet(access.getBase())){
-                    val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, idx.getConstant()), Value.getUndef()));
+                    val = meetValue(val, valMap.getOrDefault(new Pair<>(obj, idx), Value.getUndef()));
                     val = meetValue(val , valMap.getOrDefault(new Pair<>(obj, Value.getNAC()), Value.getUndef()));
                 }
             }else if (idx.isNAC()){
